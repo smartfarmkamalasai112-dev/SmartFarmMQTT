@@ -11,12 +11,21 @@ import time
 import calendar
 
 # ==========================================
-# ⚙️ CONFIG FLASK ให้ชี้ไปที่โฟลเดอร์ React (dist)
+# ⚙️ CONFIG PATHS (ตั้งค่าโฟลเดอร์)
 # ==========================================
+# หาตำแหน่งของไฟล์ app.py ปัจจุบัน
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# ชี้ไปที่โฟลเดอร์ dist ที่ได้จากการ build react
+
+# ชี้ไปที่โฟลเดอร์ 'dist' ของ React 
+# (สมมติว่าโครงสร้างคือ SmartFarmMQTT/MyWeb/app.py และ SmartFarmMQTT/smart-farm-dashboard/dist)
 react_dist_dir = os.path.join(current_dir, '../smart-farm-dashboard/dist')
 
+# ตรวจสอบว่ามีโฟลเดอร์ dist จริงไหม (ถ้าไม่มีจะแจ้งเตือนใน Log)
+if not os.path.exists(react_dist_dir):
+    print(f"⚠️  WARNING: ไม่พบโฟลเดอร์ React ที่ {react_dist_dir}")
+    print("   👉 กรุณารัน 'npm run build' ในโฟลเดอร์ smart-farm-dashboard ก่อน")
+
+# ตั้งค่า Flask ให้ Static Folder คือ 'assets' ใน dist
 app = Flask(__name__, 
             static_folder=os.path.join(react_dist_dir, 'assets'), 
             template_folder=react_dist_dir,
@@ -46,7 +55,7 @@ except Exception as e:
     print(f"❌ Google Sheet Error: {e}")
 
 # ==========================================
-# 2. LOGIC & MQTT
+# 2. LOGIC & MQTT Handlers
 # ==========================================
 sensor_data = {"air":{"temp":0,"hum":0},"soil":{"hum":0,"ph":0,"n":0,"p":0,"k":0},"env":{"lux":0,"co2":0}}
 relay_status = {"mode":"MANUAL","relays":[False]*4, "config": []}
@@ -108,7 +117,7 @@ def start_mqtt():
 threading.Thread(target=start_mqtt, daemon=True).start()
 
 # ==========================================
-# 3. API ROUTES
+# 3. API ROUTES (Data & Control)
 # ==========================================
 
 @app.route('/api/data')
@@ -140,7 +149,7 @@ def set_config():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 500
 
-# >>> แก้ไขตรงนี้: ใส่ Logic ดึงกราฟกลับมาให้ครบ <<<
+# API ดึงประวัติกราฟ (Logic ที่แก้ไขแล้ว)
 @app.route('/api/sheet-history', methods=['GET'])
 def get_sheet_history():
     mode = request.args.get('mode', 'day')
@@ -150,7 +159,7 @@ def get_sheet_history():
         if len(rows) < 2: return jsonify({"data": []})
         data_rows = rows[1:]; grouped = {}; now = datetime.now()
         
-        # เตรียม Template ข้อมูลตามช่วงเวลา
+        # เตรียม Template
         if mode == 'day':
             for h in range(24):
                 key = f"{h:02}:00"; grouped[key] = {"t_s":0,"h_s":0,"s_s":0,"l_s":0,"co":0,"n":0,"p":0,"k":0,"ph":0,"c":0,"time":key,"date":now.strftime('%Y-%m-%d'), "sort": h}
@@ -165,7 +174,7 @@ def get_sheet_history():
                 dt_day = datetime(now.year, now.month, d)
                 key = dt_day.strftime('%d/%m'); grouped[key] = {"t_s":0,"h_s":0,"s_s":0,"l_s":0,"co":0,"n":0,"p":0,"k":0,"ph":0,"c":0,"time":key,"date":dt_day.strftime('%Y-%m-%d'), "sort": d}
 
-        # วนลูปข้อมูลจาก Sheet มาใส่ใน Template
+        # เติมข้อมูล
         for row in data_rows:
             if len(row) < 11: continue
             dt = parse_dt(row[0], row[1])
@@ -180,7 +189,7 @@ def get_sheet_history():
                 g["t_s"]+=safe_float(row[2]); g["h_s"]+=safe_float(row[3]); g["s_s"]+=safe_float(row[4]); g["l_s"]+=safe_float(row[5])
                 g["co"]+=safe_float(row[6]); g["n"]+=safe_float(row[7]); g["p"]+=safe_float(row[8]); g["k"]+=safe_float(row[9]); g["ph"]+=safe_float(row[10]); g["c"]+=1
 
-        # คำนวณค่าเฉลี่ย
+        # คำนวณค่าเฉลี่ยส่งกลับ
         res = []
         for k in sorted(grouped.keys(), key=lambda x: grouped[x]['sort']):
             v = grouped[k]
@@ -191,14 +200,18 @@ def get_sheet_history():
     except Exception as e: return jsonify({"data": [], "error": str(e)})
 
 # ==========================================
-# 4. REACT ROUTING
+# 4. REACT ROUTING (หน้าเว็บ)
 # ==========================================
+# Route สำหรับให้ Flask เสิร์ฟไฟล์หน้าเว็บ React
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_react(path):
+    # ถ้า React ขอไฟล์ asset (js/css/รูป)
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return app.send_static_file(path)
+    # ถ้าไม่เจอไฟล์ หรือเข้าหน้าแรก ให้ส่ง index.html
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # ⚠️ สำคัญ: รันที่ Port 80 เพื่อให้ Dataplicity (Wormhole) ทำงานได้
+    app.run(host='0.0.0.0', port=80)
