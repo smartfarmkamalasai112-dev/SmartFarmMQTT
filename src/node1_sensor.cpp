@@ -8,11 +8,11 @@
 #include <SoftwareSerial.h> // ต้องใช้สำหรับ CO2 เพราะ HW Serial เต็ม
 
 // =========================================
-// 1. WiFi & MQTT Config
+// 1. WiFi & MQTT Config (แก้ไขส่วนนี้)
 // =========================================
-const char* ssid = "1";
-const char* password = "11111111";
-const char* mqtt_server = "10.214.234.116";
+const char* ssid = "Kamalasai2_EXT";   // แก้ตามรูปภาพ
+const char* password = "";             // แก้ตามคำสั่ง (no password)
+const char* mqtt_server = "192.168.1.206"; // แก้เป็น Static IP ที่ฟิกไว้ใน Pi
 const int mqtt_port = 1883;
 
 WiFiClient espClient;

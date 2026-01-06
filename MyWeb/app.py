@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import paho.mqtt.client as mqtt
 import json
@@ -10,14 +10,25 @@ import os
 import time
 import calendar
 
-app = Flask(__name__)
+# ==========================================
+# ⚙️ CONFIG FLASK ให้ชี้ไปที่โฟลเดอร์ React (dist)
+# ==========================================
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# ชี้ไปที่โฟลเดอร์ dist ที่ได้จากการ build react
+react_dist_dir = os.path.join(current_dir, '../smart-farm-dashboard/dist')
+
+app = Flask(__name__, 
+            static_folder=os.path.join(react_dist_dir, 'assets'), 
+            template_folder=react_dist_dir,
+            static_url_path='/assets')
+
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ==========================================
 # 1. SETUP GOOGLE SHEETS & MQTT
 # ==========================================
 SHEET_NAME = "SmartFarm_Data"
-CREDENTIALS_PATH = '/home/admin/PlatformIOProjects/SmartFarmMQTT/MyWeb/credentials.json'
+CREDENTIALS_PATH = os.path.join(current_dir, 'credentials.json')
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
 
 sheet = None
@@ -29,11 +40,13 @@ try:
         client_gs = gspread.authorize(creds)
         sheet = client_gs.open(SHEET_NAME).sheet1
         print(f"✅ Google Sheet Connected!")
+    else:
+        print(f"⚠️ Warning: Credentials file not found at {CREDENTIALS_PATH}")
 except Exception as e:
     print(f"❌ Google Sheet Error: {e}")
 
 # ==========================================
-# 2. GLOBAL VARIABLES & HELPERS
+# 2. LOGIC & MQTT
 # ==========================================
 sensor_data = {"air":{"temp":0,"hum":0},"soil":{"hum":0,"ph":0,"n":0,"p":0,"k":0},"env":{"lux":0,"co2":0}}
 relay_status = {"mode":"MANUAL","relays":[False]*4, "config": []}
@@ -53,9 +66,6 @@ def parse_dt(d, t):
         except: continue
     return None
 
-# ==========================================
-# 3. MQTT & SAVE LOGIC
-# ==========================================
 def on_message(client, userdata, msg):
     global sensor_data, relay_status
     try:
@@ -98,7 +108,7 @@ def start_mqtt():
 threading.Thread(target=start_mqtt, daemon=True).start()
 
 # ==========================================
-# 4. API ROUTES (รวมส่วนควบคุมและกราฟ)
+# 3. API ROUTES
 # ==========================================
 
 @app.route('/api/data')
@@ -130,6 +140,7 @@ def set_config():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 500
 
+# >>> แก้ไขตรงนี้: ใส่ Logic ดึงกราฟกลับมาให้ครบ <<<
 @app.route('/api/sheet-history', methods=['GET'])
 def get_sheet_history():
     mode = request.args.get('mode', 'day')
@@ -139,7 +150,7 @@ def get_sheet_history():
         if len(rows) < 2: return jsonify({"data": []})
         data_rows = rows[1:]; grouped = {}; now = datetime.now()
         
-        # --- สร้าง Template ตามโจทย์ ---
+        # เตรียม Template ข้อมูลตามช่วงเวลา
         if mode == 'day':
             for h in range(24):
                 key = f"{h:02}:00"; grouped[key] = {"t_s":0,"h_s":0,"s_s":0,"l_s":0,"co":0,"n":0,"p":0,"k":0,"ph":0,"c":0,"time":key,"date":now.strftime('%Y-%m-%d'), "sort": h}
@@ -154,6 +165,7 @@ def get_sheet_history():
                 dt_day = datetime(now.year, now.month, d)
                 key = dt_day.strftime('%d/%m'); grouped[key] = {"t_s":0,"h_s":0,"s_s":0,"l_s":0,"co":0,"n":0,"p":0,"k":0,"ph":0,"c":0,"time":key,"date":dt_day.strftime('%Y-%m-%d'), "sort": d}
 
+        # วนลูปข้อมูลจาก Sheet มาใส่ใน Template
         for row in data_rows:
             if len(row) < 11: continue
             dt = parse_dt(row[0], row[1])
@@ -168,6 +180,7 @@ def get_sheet_history():
                 g["t_s"]+=safe_float(row[2]); g["h_s"]+=safe_float(row[3]); g["s_s"]+=safe_float(row[4]); g["l_s"]+=safe_float(row[5])
                 g["co"]+=safe_float(row[6]); g["n"]+=safe_float(row[7]); g["p"]+=safe_float(row[8]); g["k"]+=safe_float(row[9]); g["ph"]+=safe_float(row[10]); g["c"]+=1
 
+        # คำนวณค่าเฉลี่ย
         res = []
         for k in sorted(grouped.keys(), key=lambda x: grouped[x]['sort']):
             v = grouped[k]
@@ -176,6 +189,16 @@ def get_sheet_history():
             else: res.append({"time": v["time"], "date": v["date"], "temp": None})
         return jsonify({"data": res})
     except Exception as e: return jsonify({"data": [], "error": str(e)})
+
+# ==========================================
+# 4. REACT ROUTING
+# ==========================================
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return app.send_static_file(path)
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
