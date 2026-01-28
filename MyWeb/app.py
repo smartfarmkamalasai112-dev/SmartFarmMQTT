@@ -150,19 +150,24 @@ def on_message(client, userdata, msg):
             last_mqtt_update = time.time()
             save_to_sheet(data)
         elif msg.topic == "smartfarm/status":
-            # รับสถานะจาก ESP32 - ถ้ามีโครงสร้าง relays array ให้อัพเดต
-            if "relays" in data:
-                relay_status = data
-            # ถ้าเป็น legacy format (array ธรรมดา) ให้ map ไป
-            elif isinstance(data, list):
-                relay_status["relays"] = [
-                    {
-                        "name": relay_status["relays"][i].get("name", f"Relay {i+1}"),
-                        "state": data[i],
-                        "mode": relay_status["relays"][i].get("mode", "MANUAL")
-                    }
-                    for i in range(min(len(data), 4))
-                ]
+            # Format 1: New format with relays as objects
+            if isinstance(data, dict) and "relays" in data and isinstance(data.get("relays"), list) and len(data["relays"]) > 0:
+                if isinstance(data["relays"][0], dict):
+                    # Already in new format
+                    relay_status = data
+                    return
+            
+            # Format 2: Legacy format from ESP32 {mode, relays: [bool...]}
+            if isinstance(data, dict) and "relays" in data and isinstance(data.get("relays"), list):
+                relays_list = data.get("relays", [])
+                # Update only state, preserve mode settings
+                for i in range(min(len(relays_list), 4)):
+                    if i < len(relay_status['relays']):
+                        relay_status['relays'][i]['state'] = relays_list[i]
+                # Also update config if present
+                if "config" in data:
+                    relay_status["config"] = data["config"]
+                return
     except Exception as e:
         print(f"❌ MQTT Message Error: {e}")
 
