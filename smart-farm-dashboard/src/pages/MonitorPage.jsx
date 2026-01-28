@@ -167,13 +167,8 @@ export default function MonitorPage({ displayData }) {
 
   return (
     <div className="w-full pb-6">
-      {/* Header - Clean & Sharp */}
-      <div className="mb-8">
-        <h1 className="text-4xl lg:text-5xl font-bold text-slate-900">ภาพรวมระบบ</h1>
-      </div>
-
       {/* Main 4 Metrics - Premium Design */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <MetricCard
           icon={Thermometer}
           label="อุณหภูมิ"
@@ -204,13 +199,8 @@ export default function MonitorPage({ displayData }) {
         />
       </div>
 
-      {/* NPK Section */}
-      <div className="mb-8">
-        <NPK npk={displayData.npk} />
-      </div>
-
       {/* Secondary Metrics - Sharp & Modern */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
         {(() => {
           const phStatus = getStatusInfo('ph', displayData.ph);
           const co2Status = getStatusInfo('co2', displayData.co2);
@@ -272,6 +262,11 @@ export default function MonitorPage({ displayData }) {
             </>
           );
         })()}
+      </div>
+
+      {/* NPK Section - Smaller */}
+      <div className="mb-4">
+        <NPK npk={displayData.npk} />
       </div>
     </div>
   );
