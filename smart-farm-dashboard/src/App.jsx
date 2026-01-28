@@ -30,14 +30,8 @@ export default function App() {
     config: controlStatus.config || []
   };
 
-  const handleToggleMode = (index, mode) => sendCommand({ type: 'MODE', index: index, mode: mode });
-  const handleToggleRelay = (index) => {
-    // Get current relay state from controlStatus
-    const currentState = Array.isArray(controlStatus.relays) 
-      ? controlStatus.relays[index]
-      : controlStatus.relays?.relays?.[index]?.state || false;
-    sendCommand({ type: 'RELAY', index: index, value: !currentState });
-  };
+  const handleToggleMode = () => sendCommand({ type: 'MODE', value: displayData.mode === 'AUTO' ? 'MANUAL' : 'AUTO' });
+  const handleToggleRelay = (index) => sendCommand({ type: 'RELAY', index: index, value: !displayData.relay[index] });
   const handleSaveConfig = (index, newRule) => sendConfig(index, newRule);
   const closeMenu = () => setSidebarOpen(false);
   const isConnected = connectionStatus && connectionStatus.includes('Connected');

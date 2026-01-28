@@ -47,16 +47,7 @@ except Exception as e:
 # 2. GLOBAL VARIABLES
 # ==========================================
 sensor_data = {"air":{"temp":0,"hum":0},"soil":{"hum":0,"ph":0,"n":0,"p":0,"k":0},"env":{"lux":0,"co2":0}}
-# แต่ละ relay มี mode (AUTO/MANUAL) แยกกัน
-relay_status = {
-    "relays": [
-        {"name": "ปั๊มน้ำ", "state": False, "mode": "MANUAL"},
-        {"name": "พัดลม", "state": False, "mode": "MANUAL"},
-        {"name": "ไฟส่องสว่าง", "state": False, "mode": "MANUAL"},
-        {"name": "พ่นหมอก", "state": False, "mode": "MANUAL"}
-    ],
-    "config": []
-}
+relay_status = {"mode":"MANUAL","relays":[False]*4, "config": []}
 last_save_time = 0
 last_mqtt_update = time.time()
 
@@ -124,8 +115,7 @@ def save_to_sheet(data):
     now = datetime.now()
     if sheet:
         try:
-            relays = relay_status.get('relays', [])
-            relay_states = [r.get('state', False) if isinstance(r, dict) else r for r in relays]
+            r = relay_status.get('relays', [False]*4)
             row = [
                 now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"),
                 data.get('air', {}).get('temp', 0), data.get('air', {}).get('hum', 0),
@@ -133,8 +123,8 @@ def save_to_sheet(data):
                 data.get('env', {}).get('co2', 0), data.get('soil', {}).get('n', 0),
                 data.get('soil', {}).get('p', 0), data.get('soil', {}).get('k', 0),
                 data.get('soil', {}).get('ph', 0),
-                "ON" if relay_states[0] else "OFF", "ON" if relay_states[1] else "OFF", 
-                "ON" if relay_states[2] else "OFF", "ON" if relay_states[3] else "OFF"
+                "ON" if r[0] else "OFF", "ON" if r[1] else "OFF", 
+                "ON" if r[2] else "OFF", "ON" if r[3] else "OFF"
             ]
             sheet.append_row(row)
         except: pass
@@ -150,24 +140,8 @@ def on_message(client, userdata, msg):
             last_mqtt_update = time.time()
             save_to_sheet(data)
         elif msg.topic == "smartfarm/status":
-            # Format 1: New format with relays as objects
-            if isinstance(data, dict) and "relays" in data and isinstance(data.get("relays"), list) and len(data["relays"]) > 0:
-                if isinstance(data["relays"][0], dict):
-                    # Already in new format
-                    relay_status = data
-                    return
-            
-            # Format 2: Legacy format from ESP32 {mode, relays: [bool...]}
-            if isinstance(data, dict) and "relays" in data and isinstance(data.get("relays"), list):
-                relays_list = data.get("relays", [])
-                # Update only state, preserve mode settings
-                for i in range(min(len(relays_list), 4)):
-                    if i < len(relay_status['relays']):
-                        relay_status['relays'][i]['state'] = relays_list[i]
-                # Also update config if present
-                if "config" in data:
-                    relay_status["config"] = data["config"]
-                return
+            # รับสถานะจริงจาก ESP32 มาอัปเดต (เผื่อกด manual ที่บอร์ด)
+            relay_status = data
     except Exception as e:
         print(f"❌ MQTT Message Error: {e}")
 
@@ -302,40 +276,29 @@ def health_check():
 
 @app.route('/api/mode', methods=['POST'])
 def set_mode():
-    """Set mode (AUTO/MANUAL) for a specific relay"""
     global relay_status
     payload = request.json or {}
-    idx = payload.get('index')  # Relay index
-    mode = payload.get('mode')  # "AUTO" or "MANUAL"
+    # Accept either {"mode": "AUTO"} or {"type":"MODE","value":"AUTO"}
+    mode = payload.get('mode') if payload.get('mode') is not None else payload.get('value')
     
-    if idx is None or mode not in ["AUTO", "MANUAL"]:
-        return jsonify({"status": "error", "message": "Invalid parameters"}), 400
-    
-    # ✅ 1. อัปเดต relay_status ใน Python ทันที
-    if 0 <= idx < len(relay_status.get('relays', [])):
-        relay_status['relays'][idx]['mode'] = mode
+    # ✅ 1. อัปเดตตัวแปรใน Python ทันที (เพื่อให้หน้าเว็บเปลี่ยนทันที)
+    relay_status['mode'] = mode
     
     # 2. ส่งคำสั่ง MQTT
-    if mqtt_client:
-        mqtt_client.publish("smartfarm/control", json.dumps({"type": "MODE", "index": idx, "value": mode}))
-        return jsonify({"status": "ok", "relay": idx, "mode": mode})
+    if mqtt_client and mode is not None:
+        mqtt_client.publish("smartfarm/control", json.dumps({"type": "MODE", "value": mode}))
+        return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 500
 
 @app.route('/api/relay', methods=['POST'])
 def set_relay():
-    """Set relay state (ON/OFF) - only works in MANUAL mode"""
     global relay_status
     idx = request.json.get('index')
     val = request.json.get('value')
     
-    # ✅ 1. ตรวจสอบว่า relay นี้เป็น MANUAL mode
-    if 0 <= idx < len(relay_status.get('relays', [])):
-        relay_data = relay_status['relays'][idx]
-        if relay_data.get('mode') != 'MANUAL':
-            return jsonify({"status": "error", "message": f"Relay {idx} is in {relay_data.get('mode')} mode"}), 403
-        
-        # อัปเดตสถานะทันที
-        relay_status['relays'][idx]['state'] = val
+    # ✅ 1. อัปเดตตัวแปรใน Python ทันที (เพื่อให้หน้าเว็บเปลี่ยนทันที)
+    if 0 <= idx < 4:
+        relay_status['relays'][idx] = val
 
     # 2. ส่งคำสั่ง MQTT
     if mqtt_client:
