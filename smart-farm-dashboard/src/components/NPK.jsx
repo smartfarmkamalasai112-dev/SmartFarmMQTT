@@ -29,7 +29,7 @@ export default function NPK({ npk }) {
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-gray-100 p-4 rounded-2xl shadow-lg border border-white/60 h-full flex flex-col">
-      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">
+      <div className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-4 text-center">
         Nutrients (NPK) - mg/kg
       </div>
       
@@ -38,16 +38,16 @@ export default function NPK({ npk }) {
           <BarChart
             data={data}
             layout="vertical"
-            margin={{ top: 5, right: 20, left: 100, bottom: 5 }}
+            margin={{ top: 5, right: 25, left: 110, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis type="number" domain={[0, maxValue]} stroke="#94a3b8" tick={{ fontSize: 10 }} />
+            <XAxis type="number" domain={[0, maxValue]} stroke="#475569" tick={{ fontSize: 11, fontWeight: 600, fill: '#334155' }} />
             <YAxis 
               type="category" 
               dataKey="name" 
-              width={95}
-              tick={{ fontSize: 10, fill: '#475569', fontWeight: '600' }}
-              stroke="#cbd5e1"
+              width={105}
+              tick={{ fontSize: 12, fill: '#1e293b', fontWeight: 'bold' }}
+              stroke="#64748b"
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar 
@@ -64,18 +64,18 @@ export default function NPK({ npk }) {
       </div>
 
       {/* Legend */}
-      <div className="flex gap-3 justify-center mt-2 pt-2 border-t border-gray-200 text-xs">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded bg-blue-500"></div>
-          <span className="font-semibold text-slate-700">N: {formatNum(n)}</span>
+      <div className="flex gap-4 justify-center mt-3 pt-3 border-t border-gray-300 text-sm">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-blue-600"></div>
+          <span className="font-bold text-slate-800">N: {formatNum(n)}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded bg-orange-500"></div>
-          <span className="font-semibold text-slate-700">P: {formatNum(p)}</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-orange-600"></div>
+          <span className="font-bold text-slate-800">P: {formatNum(p)}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded bg-purple-500"></div>
-          <span className="font-semibold text-slate-700">K: {formatNum(k)}</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-purple-600"></div>
+          <span className="font-bold text-slate-800">K: {formatNum(k)}</span>
         </div>
       </div>
     </div>
