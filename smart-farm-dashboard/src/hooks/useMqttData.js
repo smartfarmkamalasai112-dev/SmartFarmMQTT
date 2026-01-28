@@ -45,24 +45,58 @@ export function useMqttData() {
     }
   }, []);
 
-  // 3. ตั้งเวลาดึงข้อมูลทุก 2 วินาที (ลดจาก 1 วินาทีเพื่อให้เร็วขึ้น)
+  // 3. ตั้งเวลาดึงข้อมูลทุก 2 วินาที + aggressive startup retries
   useEffect(() => {
-    // ดึงข้อมูลทันทีเมื่อ mount
-    fetchData();
+    let isMounted = true;
     
-    // ถ้าไม่ได้ข้อมูล ให้ retry หลังจาก 1 วินาที
-    const initialRetryTimer = setTimeout(() => {
-      fetchData();
-    }, 1000);
+    // ฟังก์ชัน fetch พร้อม retry logic
+    const fetchWithRetry = async (retryCount = 0, maxRetries = 5) => {
+      if (!isMounted) return;
+      
+      try {
+        const res = await fetch('/api/data', { 
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-cache'
+        });
+        
+        if (res.ok) {
+          const json = await res.json();
+          if (isMounted) {
+            if (json.sensors) setData(json.sensors);
+            if (json.status) setControlStatus(json.status);
+            setConnectionStatus('Connected');
+          }
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (error) {
+        if (isMounted) {
+          // ถ้า retry count ยังน้อยให้ retry ทันที
+          if (retryCount < maxRetries) {
+            console.warn(`Fetch attempt ${retryCount + 1} failed: ${error.message}, retrying...`);
+            setTimeout(() => fetchWithRetry(retryCount + 1, maxRetries), 500);
+          } else {
+            console.error("Fetch Error after all retries:", error);
+            setConnectionStatus('Disconnected');
+          }
+        }
+      }
+    };
+    
+    // ดึงข้อมูลทันทีเมื่อ mount (พร้อม aggressive retry)
+    fetchWithRetry(0, 5);
     
     // ตั้ง interval สำหรับ polling
-    const interval = setInterval(fetchData, 2000);
+    const interval = setInterval(() => {
+      fetchWithRetry(0, 2);  // ถ้า polling fail ให้ retry 2 ครั้ง
+    }, 2000);
     
     return () => {
-      clearTimeout(initialRetryTimer);
+      isMounted = false;
       clearInterval(interval);
     };
-  }, [fetchData]);
+  }, []);
 
   // 4. ฟังก์ชันส่งคำสั่ง (เปิดปิดไฟ/ปั๊ม)
   const sendCommand = async (cmd) => {

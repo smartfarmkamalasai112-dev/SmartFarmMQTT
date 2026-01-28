@@ -147,27 +147,86 @@ def on_message(client, userdata, msg):
 
 def start_mqtt():
     global mqtt_client
-    max_retries = 5
+    max_retries = 10
     retry_count = 0
     
     while retry_count < max_retries:
         try:
-            mqtt_client = mqtt.Client()
+            mqtt_client = mqtt.Client(client_id="smartfarm-dashboard", clean_session=True)
             mqtt_client.on_message = on_message
-            mqtt_client.on_connect = lambda client, userdata, flags, rc: print(f"✅ MQTT Connected (rc={rc})")
-            mqtt_client.on_disconnect = lambda client, userdata, rc: print(f"⚠️ MQTT Disconnected (rc={rc})")
+            mqtt_client.on_connect = on_connect
+            mqtt_client.on_disconnect = on_disconnect
+            mqtt_client.on_subscribe = on_subscribe
+            
+            # ตั้งค่า reconnect อัตโนมัติ
+            mqtt_client.will_set("smartfarm/status/online", "0", qos=1, retain=True)
             
             print("🔌 Connecting to MQTT broker at localhost:1883...")
-            mqtt_client.connect("localhost", 1883, 60)
-            mqtt_client.subscribe([("smartfarm/sensors", 0), ("smartfarm/status", 0)])
-            print("✅ MQTT Connected and subscribed!")
-            mqtt_client.loop_forever()
+            mqtt_client.connect("localhost", 1883, keepalive=60)
+            
+            # ใช้ loop_start() แทน loop_forever() เพื่อให้ reconnect อัตโนมัติ
+            mqtt_client.loop_start()
+            print("✅ MQTT Loop Started!")
+            return  # ✅ ออกจากฟังก์ชันเมื่อเชื่อมต่อสำเร็จ
+            
         except Exception as e:
             retry_count += 1
+            backoff = min(2 ** retry_count, 60)  # Max 60 seconds
             print(f"❌ MQTT Connection Failed (attempt {retry_count}/{max_retries}): {e}")
-            time.sleep(2 ** retry_count)  # Exponential backoff: 2s, 4s, 8s, 16s, 32s
+            print(f"⏳ Retrying in {backoff} seconds...")
+            time.sleep(backoff)
+    
+    print(f"❌ MQTT Failed after {max_retries} attempts - Dashboard will use mock data")
 
-threading.Thread(target=start_mqtt, daemon=True).start()
+def on_connect(client, userdata, flags, rc):
+    """Callback when MQTT connects"""
+    global last_mqtt_update
+    if rc == 0:
+        print(f"✅ MQTT Connected Successfully (rc={rc})")
+        client.subscribe([("smartfarm/sensors", 0), ("smartfarm/status", 0)])
+        print("✅ Subscribed to: smartfarm/sensors, smartfarm/status")
+        last_mqtt_update = time.time()
+    else:
+        print(f"❌ MQTT Connection Failed with code {rc}")
+
+def on_disconnect(client, userdata, rc):
+    """Callback when MQTT disconnects"""
+    if rc != 0:
+        print(f"⚠️ Unexpected MQTT Disconnection (rc={rc}), will auto-reconnect...")
+    else:
+        print(f"ℹ️ MQTT Cleanly Disconnected (rc={rc})")
+
+def on_subscribe(client, userdata, mid, granted_qos):
+    """Callback when subscription confirmed"""
+    print(f"✅ Subscription confirmed with QoS: {granted_qos}")
+
+# Start MQTT in background thread with daemon=True
+mqtt_thread = threading.Thread(target=start_mqtt, daemon=True)
+mqtt_thread.start()
+print("🔄 MQTT Thread Started (Background)")
+
+def monitor_mqtt_status():
+    """Monitor MQTT connection status every 30 seconds"""
+    while True:
+        try:
+            time.sleep(30)
+            if mqtt_client:
+                is_connected = mqtt_client.is_connected()
+                time_since_update = time.time() - last_mqtt_update
+                
+                status = "✅ MQTT Connected" if is_connected else "❌ MQTT Disconnected"
+                data_status = "📊 Data flowing" if time_since_update < 10 else f"⏱️ No data for {int(time_since_update)}s"
+                
+                print(f"[MQTT Monitor] {status} | {data_status}")
+            else:
+                print("[MQTT Monitor] ⏳ Initializing MQTT client...")
+        except Exception as e:
+            print(f"[MQTT Monitor] Error: {e}")
+
+# Start monitoring thread
+monitor_thread = threading.Thread(target=monitor_mqtt_status, daemon=True)
+monitor_thread.start()
+print("📡 MQTT Monitoring Started (checks every 30s)")
 
 # ==========================================
 # 4. API ROUTES
@@ -198,13 +257,21 @@ def get_data():
 @app.route('/api/health')
 def health_check():
     """Health check endpoint - returns system status"""
+    mqtt_is_connected = mqtt_client and mqtt_client.is_connected() if mqtt_client else False
     mqtt_active = time.time() - last_mqtt_update < 10
+    time_since_update = time.time() - last_mqtt_update
+    
     return jsonify({
         "status": "healthy",
-        "mqtt_connected": mqtt_active,
-        "last_mqtt_update": time.time() - last_mqtt_update,
+        "timestamp": datetime.now().isoformat(),
+        "mqtt": {
+            "is_connected": mqtt_is_connected,
+            "has_data": mqtt_active,
+            "seconds_since_last_update": round(time_since_update, 2)
+        },
         "sensor_data": sensor_data,
-        "relay_status": relay_status
+        "relay_status": relay_status,
+        "version": "2.0 - Permanent MQTT Fix"
     })
 
 @app.route('/api/mode', methods=['POST'])
