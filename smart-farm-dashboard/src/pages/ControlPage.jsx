@@ -17,7 +17,6 @@ export default function ControlPage({ displayData, onToggleRelay, onToggleMode, 
       {/* ฝั่งซ้าย: ปุ่มกดเปิดปิด */}
       <RelayControl 
         relays={displayData.relay} 
-        mode={displayData.mode}
         onToggleRelay={onToggleRelay}
         onToggleMode={onToggleMode}
         connectionStatus={connectionStatus}
