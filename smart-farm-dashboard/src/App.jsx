@@ -30,7 +30,7 @@ export default function App() {
     config: controlStatus.config || []
   };
 
-  const handleToggleMode = () => sendCommand({ type: 'MODE', value: displayData.mode === 'AUTO' ? 'MANUAL' : 'AUTO' });
+  const handleToggleMode = (newMode) => sendCommand({ type: 'MODE', value: newMode });
   const handleToggleRelay = (index) => sendCommand({ type: 'RELAY', index: index, value: !displayData.relay[index] });
   const handleSaveConfig = (index, newRule) => sendConfig(index, newRule);
   const closeMenu = () => setSidebarOpen(false);

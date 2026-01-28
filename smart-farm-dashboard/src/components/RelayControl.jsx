@@ -20,21 +20,21 @@ export default function RelayControl({ relays, mode, onToggleRelay, onToggleMode
           <h3 className="text-xl font-bold text-slate-800">โหมดการทำงาน</h3>
           <p className="text-sm text-slate-500 mt-1">{isConnected ? '✅ เลือกโหมดควบคุมอุปกรณ์' : '❌ ตัวควบคุมออฟไลน์'}</p>
         </div>
-        <div className="flex bg-slate-100/80 p-1.5 rounded-2xl backdrop-blur-sm">
+        <div className="flex bg-slate-100/80 p-1.5 rounded-2xl backdrop-blur-sm gap-1">
           <button
-            onClick={() => onToggleMode()}
+            onClick={() => !isAuto && isConnected && onToggleMode('AUTO')}
             disabled={isAuto || !isConnected}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
-              isAuto ? 'bg-green-500 text-white shadow-lg scale-105' : (!isConnected ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50')
+              isAuto ? 'bg-green-500 text-white shadow-lg scale-105' : (!isConnected ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 cursor-pointer')
             }`}
           >
             <Cpu size={18} /> AUTO
           </button>
           <button
-            onClick={() => onToggleMode()}
+            onClick={() => isAuto && isConnected && onToggleMode('MANUAL')}
             disabled={!isAuto || !isConnected}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
-              !isAuto ? 'bg-red-500 text-white shadow-lg scale-105' : (!isConnected ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50')
+              !isAuto ? 'bg-red-500 text-white shadow-lg scale-105' : (!isConnected ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 cursor-pointer')
             }`}
           >
             <Hand size={18} /> MANUAL
